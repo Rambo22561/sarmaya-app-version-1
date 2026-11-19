@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">StockShare</string>
+    <string name="sign_in_with_google">Login with Google</string>
+    <string name="register_with_google">Register &amp; Login with Google</string>
+    <string name="marketplace_tagline">Real Physical Product Ownership Marketplace</string>
+    <string name="marketplace_disclaimer">Real-product ownership only. Returns depend on actual physical product sales after documented expenses and 10% platform commission. No fixed or guaranteed profit.</string>
+    <string name="buyback_disclaimer">Buyback is subject to admin inspection, acceptance, and available company funds. A 10% admin deduction applies to agreed buyback value.</string>
+    <string name="referral_disclaimer">Referrals increase eligible active members to reduce everyone\'s shared monthly company expense. Zero cash commissions or multi-level payouts.</string>
+</resources>

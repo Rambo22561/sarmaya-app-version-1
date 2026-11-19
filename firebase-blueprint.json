@@ -1,0 +1,379 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Investor or admin account profile, wallet balances, and referral metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["INVESTOR", "ADMIN"] },
+        "eligibleMember": { "type": "boolean" },
+        "referralCode": { "type": "string" },
+        "referredByCode": { "type": "string" },
+        "referredByUserId": { "type": "string" },
+        "availableBalance": { "type": "number" },
+        "pendingBalance": { "type": "number" },
+        "investedCapital": { "type": "number" },
+        "realizedProfit": { "type": "number" },
+        "buybackProceeds": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "displayName", "email", "phone", "role", "eligibleMember",
+        "referralCode", "availableBalance", "pendingBalance", "investedCapital",
+        "realizedProfit", "buybackProceeds", "createdAt", "updatedAt"
+      ]
+    },
+    "ReferralCodeLookup": {
+      "title": "ReferralCodeLookup",
+      "description": "Zero-PII lookup mapping a referral code to its owner userId.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "code": { "type": "string" },
+        "ownerFirstName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "code", "ownerFirstName", "createdAt"]
+    },
+    "AdminMember": {
+      "title": "AdminMember",
+      "description": "Trusted admin registry document.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "createdAt"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Tracks member referrals without cash commissions.",
+      "type": "object",
+      "properties": {
+        "referrerUserId": { "type": "string" },
+        "referrerCode": { "type": "string" },
+        "referredUserId": { "type": "string" },
+        "referredName": { "type": "string" },
+        "activeEligible": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["referrerUserId", "referrerCode", "referredUserId", "referredName", "activeEligible", "createdAt", "updatedAt"]
+    },
+    "ProductProject": {
+      "title": "ProductProject",
+      "description": "Physical product project managed by admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "imageKey": { "type": "string" },
+        "imageGallery": { "type": "array", "items": { "type": "string" } },
+        "purchaseCost": { "type": "number" },
+        "expectedSellingPrice": { "type": "number" },
+        "totalUnits": { "type": "integer" },
+        "availableUnits": { "type": "integer" },
+        "published": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["OPEN", "SOLD_OUT", "CLOSED"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title", "category", "description", "imageKey", "purchaseCost",
+        "expectedSellingPrice", "totalUnits", "availableUnits", "published",
+        "status", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "InvestmentPack": {
+      "title": "InvestmentPack",
+      "description": "Fixed-price pack belonging to a product project.",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "packName": { "type": "string" },
+        "price": { "type": "number" },
+        "unitsPerPack": { "type": "integer" },
+        "totalPacks": { "type": "integer" },
+        "availablePacks": { "type": "integer" },
+        "minQty": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "packName", "price", "unitsPerPack", "totalPacks", "availablePacks", "minQty", "createdAt", "updatedAt"]
+    },
+    "PaymentChannel": {
+      "title": "PaymentChannel",
+      "description": "Admin-configured manual payment account details.",
+      "type": "object",
+      "properties": {
+        "methodType": { "type": "string", "enum": ["EASYPAISA", "JAZZCASH", "BANK_TRANSFER"] },
+        "accountTitle": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "instructions": { "type": "string" },
+        "adminWhatsapp": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["methodType", "accountTitle", "accountNumber", "bankName", "instructions", "adminWhatsapp", "active", "createdAt", "updatedAt"]
+    },
+    "PaymentRequest": {
+      "title": "PaymentRequest",
+      "description": "Manual payment submission awaiting admin verification.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectTitle": { "type": "string" },
+        "packId": { "type": "string" },
+        "packName": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "unitPrice": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "transactionRef": { "type": "string" },
+        "proofSummary": { "type": "string" },
+        "proofUri": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "userName", "projectId", "projectTitle", "packId", "packName",
+        "quantity", "unitPrice", "totalAmount", "paymentMethod", "transactionRef",
+        "proofSummary", "status", "adminNote", "createdAt", "updatedAt"
+      ]
+    },
+    "OwnershipRecord": {
+      "title": "OwnershipRecord",
+      "description": "Verified product share ownership created upon payment approval.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectTitle": { "type": "string" },
+        "packId": { "type": "string" },
+        "packName": { "type": "string" },
+        "paymentRequestId": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "unitsOwned": { "type": "integer" },
+        "purchasePrice": { "type": "number" },
+        "ownershipPercent": { "type": "number" },
+        "status": { "type": "string", "enum": ["ACTIVE", "PARTIALLY_SOLD", "SOLD", "BUYBACK_REQUESTED", "BOUGHT_BACK"] },
+        "realizedCapitalReturned": { "type": "number" },
+        "realizedProfitEarned": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "userName", "projectId", "projectTitle", "packId", "packName",
+        "paymentRequestId", "quantity", "unitsOwned", "purchasePrice", "ownershipPercent",
+        "status", "realizedCapitalReturned", "realizedProfitEarned", "createdAt", "updatedAt"
+      ]
+    },
+    "ProductSale": {
+      "title": "ProductSale",
+      "description": "Recorded product sale with 10% platform commission calculation.",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "projectTitle": { "type": "string" },
+        "unitsSold": { "type": "integer" },
+        "actualRevenue": { "type": "number" },
+        "allocatedCost": { "type": "number" },
+        "eligibleExpenses": { "type": "number" },
+        "grossProfit": { "type": "number" },
+        "netDistributableProfit": { "type": "number" },
+        "platformCommission": { "type": "number" },
+        "investorProfitPool": { "type": "number" },
+        "recordedBy": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "projectId", "projectTitle", "unitsSold", "actualRevenue", "allocatedCost",
+        "eligibleExpenses", "grossProfit", "netDistributableProfit",
+        "platformCommission", "investorProfitPool", "recordedBy", "notes", "createdAt", "updatedAt"
+      ]
+    },
+    "BuybackRequest": {
+      "title": "BuybackRequest",
+      "description": "Non-guaranteed buyback request with 10% admin deduction.",
+      "type": "object",
+      "properties": {
+        "ownershipId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectTitle": { "type": "string" },
+        "originalValue": { "type": "number" },
+        "offeredPrice": { "type": "number" },
+        "deductionAmount": { "type": "number" },
+        "netPayout": { "type": "number" },
+        "status": { "type": "string", "enum": ["REQUESTED", "OFFERED", "ACCEPTED_BY_USER", "COMPLETED", "REJECTED"] },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "ownershipId", "userId", "userName", "projectId", "projectTitle",
+        "originalValue", "offeredPrice", "deductionAmount", "netPayout",
+        "status", "adminNote", "createdAt", "updatedAt"
+      ]
+    },
+    "CompanyExpense": {
+      "title": "CompanyExpense",
+      "description": "Monthly documented operating expense shared among eligible members.",
+      "type": "object",
+      "properties": {
+        "billingMonth": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["billingMonth", "category", "description", "amount", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SubscriptionCycle": {
+      "title": "SubscriptionCycle",
+      "description": "Published monthly expense-sharing calculation and promo rules.",
+      "type": "object",
+      "properties": {
+        "billingMonth": { "type": "string" },
+        "totalExpenses": { "type": "number" },
+        "carryForwardAdjustment": { "type": "number" },
+        "eligibleMemberCount": { "type": "integer" },
+        "roundingRule": { "type": "string", "enum": ["ROUND_NEAREST", "CEIL", "EXACT"] },
+        "promoEnabled": { "type": "boolean" },
+        "promoAmount": { "type": "number" },
+        "promoEligibilityNote": { "type": "string" },
+        "calculatedSharePerMember": { "type": "number" },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "billingMonth", "totalExpenses", "carryForwardAdjustment", "eligibleMemberCount",
+        "roundingRule", "promoEnabled", "promoAmount", "promoEligibilityNote",
+        "calculatedSharePerMember", "status", "createdAt", "updatedAt"
+      ]
+    },
+    "SubscriptionPayment": {
+      "title": "SubscriptionPayment",
+      "description": "Per-user monthly subscription payment record preventing duplicates.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "billingMonth": { "type": "string" },
+        "cycleId": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["PAID", "PENDING"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "billingMonth", "cycleId", "amountPaid", "paymentMethod", "status", "createdAt", "updatedAt"]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Investor withdrawal request verified by admin.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["EASYPAISA", "JAZZCASH", "BANK_TRANSFER"] },
+        "accountTitle": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "amount", "method", "accountTitle", "accountNumber", "status", "adminNote", "createdAt", "updatedAt"]
+    },
+    "LedgerEntry": {
+      "title": "LedgerEntry",
+      "description": "Immutable double-entry financial ledger record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "entryType": { "type": "string", "enum": ["CREDIT", "DEBIT"] },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "referenceId": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "entryType", "category", "amount", "balanceAfter", "referenceId", "description", "createdAt"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "In-app notification for marketplace events.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "targetRole": { "type": "string", "enum": ["USER", "ADMIN"] },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "eventType": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "targetRole", "title", "body", "eventType", "read", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable audit trail of admin actions.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "targetId": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminUid", "adminEmail", "action", "targetId", "details", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": { "$ref": "#/entities/UserAccount" }, "description": "User accounts and wallets" },
+    "/referral_codes/{code}": { "schema": { "$ref": "#/entities/ReferralCodeLookup" }, "description": "Zero-PII referral code lookup" },
+    "/admins/{uid}": { "schema": { "$ref": "#/entities/AdminMember" }, "description": "Authorized admin accounts" },
+    "/referrals/{referralId}": { "schema": { "$ref": "#/entities/ReferralRecord" }, "description": "Member referral relationships" },
+    "/projects/{projectId}": { "schema": { "$ref": "#/entities/ProductProject" }, "description": "Product investment projects" },
+    "/projects/{projectId}/packs/{packId}": { "schema": { "$ref": "#/entities/InvestmentPack" }, "description": "Fixed-price packs per project" },
+    "/payment_channels/{channelId}": { "schema": { "$ref": "#/entities/PaymentChannel" }, "description": "Admin manual payment accounts" },
+    "/payment_requests/{requestId}": { "schema": { "$ref": "#/entities/PaymentRequest" }, "description": "Manual payment verification queue" },
+    "/ownerships/{ownershipId}": { "schema": { "$ref": "#/entities/OwnershipRecord" }, "description": "Verified product ownership shares" },
+    "/product_sales/{saleId}": { "schema": { "$ref": "#/entities/ProductSale" }, "description": "Product sales and profit distributions" },
+    "/buyback_requests/{buybackId}": { "schema": { "$ref": "#/entities/BuybackRequest" }, "description": "Share buyback requests" },
+    "/company_expenses/{expenseId}": { "schema": { "$ref": "#/entities/CompanyExpense" }, "description": "Monthly operating expenses" },
+    "/subscription_cycles/{cycleId}": { "schema": { "$ref": "#/entities/SubscriptionCycle" }, "description": "Monthly expense-sharing cycles" },
+    "/subscription_payments/{subPayId}": { "schema": { "$ref": "#/entities/SubscriptionPayment" }, "description": "Subscription payment records" },
+    "/withdrawals/{withdrawalId}": { "schema": { "$ref": "#/entities/WithdrawalRequest" }, "description": "Withdrawal requests" },
+    "/ledger_entries/{entryId}": { "schema": { "$ref": "#/entities/LedgerEntry" }, "description": "Immutable double-entry financial ledger" },
+    "/notifications/{notificationId}": { "schema": { "$ref": "#/entities/AppNotification" }, "description": "Marketplace event notifications" },
+    "/audit_logs/{logId}": { "schema": { "$ref": "#/entities/AuditLog" }, "description": "Immutable admin audit trail" }
+  }
+}

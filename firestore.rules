@@ -1,0 +1,618 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default-deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email == 'khan561salman@gmail.com';
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUser(data) {
+      return data.keys().hasAll([
+               'userId', 'displayName', 'email', 'phone', 'role', 'eligibleMember',
+               'referralCode', 'availableBalance', 'pendingBalance', 'investedCapital',
+               'realizedProfit', 'buybackProceeds', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'displayName', 'email', 'phone', 'role', 'eligibleMember',
+               'referralCode', 'referredByCode', 'referredByUserId',
+               'availableBalance', 'pendingBalance', 'investedCapital',
+               'realizedProfit', 'buybackProceeds', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 160 &&
+             data.phone is string && data.phone.size() <= 30 &&
+             (data.role == 'INVESTOR' || data.role == 'ADMIN') &&
+             data.eligibleMember is bool &&
+             data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 24 &&
+             (!('referredByCode' in data) || (data.referredByCode is string && data.referredByCode.size() <= 24)) &&
+             (!('referredByUserId' in data) || (data.referredByUserId is string && data.referredByUserId.size() <= 128)) &&
+             data.availableBalance is number && data.availableBalance >= 0 &&
+             data.pendingBalance is number && data.pendingBalance >= 0 &&
+             data.investedCapital is number && data.investedCapital >= 0 &&
+             data.realizedProfit is number && data.realizedProfit >= 0 &&
+             data.buybackProceeds is number && data.buybackProceeds >= 0 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidReferralCodeDoc(data) {
+      return data.keys().hasAll(['userId', 'code', 'ownerFirstName', 'createdAt']) &&
+             data.keys().hasOnly(['userId', 'code', 'ownerFirstName', 'createdAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.code is string && data.code.size() >= 4 && data.code.size() <= 24 &&
+             data.ownerFirstName is string && data.ownerFirstName.size() >= 1 && data.ownerFirstName.size() <= 60 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAdminMember(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt']) &&
+             data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt']) &&
+             data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 160 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll(['referrerUserId', 'referrerCode', 'referredUserId', 'referredName', 'activeEligible', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['referrerUserId', 'referrerCode', 'referredUserId', 'referredName', 'activeEligible', 'createdAt', 'updatedAt']) &&
+             data.referrerUserId is string && data.referrerUserId.size() >= 1 && data.referrerUserId.size() <= 128 &&
+             data.referrerCode is string && data.referrerCode.size() >= 4 && data.referrerCode.size() <= 24 &&
+             data.referredUserId is string && data.referredUserId.size() >= 1 && data.referredUserId.size() <= 128 &&
+             data.referredName is string && data.referredName.size() >= 1 && data.referredName.size() <= 100 &&
+             data.activeEligible is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll([
+               'title', 'category', 'description', 'imageKey', 'purchaseCost',
+               'expectedSellingPrice', 'totalUnits', 'availableUnits', 'published',
+               'status', 'createdBy', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'title', 'category', 'description', 'imageKey', 'imageGallery', 'purchaseCost',
+               'expectedSellingPrice', 'totalUnits', 'availableUnits', 'published',
+               'status', 'createdBy', 'createdAt', 'updatedAt'
+             ]) &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+             data.description is string && data.description.size() >= 2 && data.description.size() <= 1200 &&
+             data.imageKey is string && data.imageKey.size() <= 200000 &&
+             (!('imageGallery' in data) || (data.imageGallery is list && data.imageGallery.size() <= 6)) &&
+             data.purchaseCost is number && data.purchaseCost > 0 &&
+             data.expectedSellingPrice is number && data.expectedSellingPrice > 0 &&
+             data.totalUnits is int && data.totalUnits > 0 &&
+             data.availableUnits is int && data.availableUnits >= 0 && data.availableUnits <= data.totalUnits &&
+             data.published is bool &&
+             (data.status == 'OPEN' || data.status == 'SOLD_OUT' || data.status == 'CLOSED') &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPack(data) {
+      return data.keys().hasAll(['projectId', 'packName', 'price', 'unitsPerPack', 'totalPacks', 'availablePacks', 'minQty', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['projectId', 'packName', 'price', 'unitsPerPack', 'totalPacks', 'availablePacks', 'minQty', 'createdAt', 'updatedAt']) &&
+             data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.packName is string && data.packName.size() >= 1 && data.packName.size() <= 80 &&
+             data.price is number && data.price > 0 &&
+             data.unitsPerPack is int && data.unitsPerPack > 0 &&
+             data.totalPacks is int && data.totalPacks > 0 &&
+             data.availablePacks is int && data.availablePacks >= 0 && data.availablePacks <= data.totalPacks &&
+             data.minQty is int && data.minQty >= 1 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPaymentChannel(data) {
+      return data.keys().hasAll(['methodType', 'accountTitle', 'accountNumber', 'bankName', 'instructions', 'adminWhatsapp', 'active', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['methodType', 'accountTitle', 'accountNumber', 'bankName', 'instructions', 'adminWhatsapp', 'active', 'createdAt', 'updatedAt']) &&
+             (data.methodType == 'EASYPAISA' || data.methodType == 'JAZZCASH' || data.methodType == 'BANK_TRANSFER') &&
+             data.accountTitle is string && data.accountTitle.size() >= 2 && data.accountTitle.size() <= 100 &&
+             data.accountNumber is string && data.accountNumber.size() >= 4 && data.accountNumber.size() <= 60 &&
+             data.bankName is string && data.bankName.size() <= 100 &&
+             data.instructions is string && data.instructions.size() <= 500 &&
+             data.adminWhatsapp is string && data.adminWhatsapp.size() <= 30 &&
+             data.active is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPaymentRequest(data) {
+      return data.keys().hasAll([
+               'userId', 'userName', 'projectId', 'projectTitle', 'packId', 'packName',
+               'quantity', 'unitPrice', 'totalAmount', 'paymentMethod', 'transactionRef',
+               'proofSummary', 'status', 'adminNote', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'userName', 'projectId', 'projectTitle', 'packId', 'packName',
+               'quantity', 'unitPrice', 'totalAmount', 'paymentMethod', 'transactionRef',
+               'proofSummary', 'proofUri', 'status', 'adminNote', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+             data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 120 &&
+             data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.packName is string && data.packName.size() >= 1 && data.packName.size() <= 80 &&
+             data.quantity is int && data.quantity >= 1 &&
+             data.unitPrice is number && data.unitPrice > 0 &&
+             data.totalAmount is number && data.totalAmount > 0 &&
+             data.paymentMethod is string && data.paymentMethod.size() >= 2 && data.paymentMethod.size() <= 40 &&
+             data.transactionRef is string && data.transactionRef.size() >= 2 && data.transactionRef.size() <= 80 &&
+             data.proofSummary is string && data.proofSummary.size() <= 300 &&
+             (!('proofUri' in data) || (data.proofUri is string && data.proofUri.size() <= 250000)) &&
+             (data.status == 'PENDING' || data.status == 'APPROVED' || data.status == 'REJECTED') &&
+             data.adminNote is string && data.adminNote.size() <= 300 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidOwnership(data) {
+      return data.keys().hasAll([
+               'userId', 'userName', 'projectId', 'projectTitle', 'packId', 'packName',
+               'paymentRequestId', 'quantity', 'unitsOwned', 'purchasePrice', 'ownershipPercent',
+               'status', 'realizedCapitalReturned', 'realizedProfitEarned', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'userName', 'projectId', 'projectTitle', 'packId', 'packName',
+               'paymentRequestId', 'quantity', 'unitsOwned', 'purchasePrice', 'ownershipPercent',
+               'status', 'realizedCapitalReturned', 'realizedProfitEarned', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+             data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 120 &&
+             data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.packName is string && data.packName.size() >= 1 && data.packName.size() <= 80 &&
+             data.paymentRequestId is string && data.paymentRequestId.size() >= 1 && data.paymentRequestId.size() <= 128 &&
+             data.quantity is int && data.quantity >= 1 &&
+             data.unitsOwned is int && data.unitsOwned >= 1 &&
+             data.purchasePrice is number && data.purchasePrice > 0 &&
+             data.ownershipPercent is number && data.ownershipPercent > 0 && data.ownershipPercent <= 100 &&
+             (data.status == 'ACTIVE' || data.status == 'PARTIALLY_SOLD' || data.status == 'SOLD' || data.status == 'BUYBACK_REQUESTED' || data.status == 'BOUGHT_BACK') &&
+             data.realizedCapitalReturned is number && data.realizedCapitalReturned >= 0 &&
+             data.realizedProfitEarned is number && data.realizedProfitEarned >= 0 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProductSale(data) {
+      return data.keys().hasAll([
+               'projectId', 'projectTitle', 'unitsSold', 'actualRevenue', 'allocatedCost',
+               'eligibleExpenses', 'grossProfit', 'netDistributableProfit',
+               'platformCommission', 'investorProfitPool', 'recordedBy', 'notes', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'projectId', 'projectTitle', 'unitsSold', 'actualRevenue', 'allocatedCost',
+               'eligibleExpenses', 'grossProfit', 'netDistributableProfit',
+               'platformCommission', 'investorProfitPool', 'recordedBy', 'notes', 'createdAt', 'updatedAt'
+             ]) &&
+             data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 120 &&
+             data.unitsSold is int && data.unitsSold > 0 &&
+             data.actualRevenue is number && data.actualRevenue >= 0 &&
+             data.allocatedCost is number && data.allocatedCost >= 0 &&
+             data.eligibleExpenses is number && data.eligibleExpenses >= 0 &&
+             data.grossProfit is number &&
+             data.netDistributableProfit is number &&
+             data.platformCommission is number && data.platformCommission >= 0 &&
+             data.investorProfitPool is number && data.investorProfitPool >= 0 &&
+             data.recordedBy is string && data.recordedBy.size() >= 1 && data.recordedBy.size() <= 128 &&
+             data.notes is string && data.notes.size() <= 400 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBuybackRequest(data) {
+      return data.keys().hasAll([
+               'ownershipId', 'userId', 'userName', 'projectId', 'projectTitle',
+               'originalValue', 'offeredPrice', 'deductionAmount', 'netPayout',
+               'status', 'adminNote', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'ownershipId', 'userId', 'userName', 'projectId', 'projectTitle',
+               'originalValue', 'offeredPrice', 'deductionAmount', 'netPayout',
+               'status', 'adminNote', 'createdAt', 'updatedAt'
+             ]) &&
+             data.ownershipId is string && data.ownershipId.size() >= 1 && data.ownershipId.size() <= 128 &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+             data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 120 &&
+             data.originalValue is number && data.originalValue > 0 &&
+             data.offeredPrice is number && data.offeredPrice >= 0 &&
+             data.deductionAmount is number && data.deductionAmount >= 0 &&
+             data.netPayout is number && data.netPayout >= 0 &&
+             (data.status == 'REQUESTED' || data.status == 'OFFERED' || data.status == 'ACCEPTED_BY_USER' || data.status == 'COMPLETED' || data.status == 'REJECTED') &&
+             data.adminNote is string && data.adminNote.size() <= 300 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCompanyExpense(data) {
+      return data.keys().hasAll(['billingMonth', 'category', 'description', 'amount', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['billingMonth', 'category', 'description', 'amount', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.billingMonth is string && data.billingMonth.size() >= 6 && data.billingMonth.size() <= 16 &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+             data.description is string && data.description.size() >= 2 && data.description.size() <= 300 &&
+             data.amount is number && data.amount >= 0 &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSubscriptionCycle(data) {
+      return data.keys().hasAll([
+               'billingMonth', 'totalExpenses', 'carryForwardAdjustment', 'eligibleMemberCount',
+               'roundingRule', 'promoEnabled', 'promoAmount', 'promoEligibilityNote',
+               'calculatedSharePerMember', 'status', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'billingMonth', 'totalExpenses', 'carryForwardAdjustment', 'eligibleMemberCount',
+               'roundingRule', 'promoEnabled', 'promoAmount', 'promoEligibilityNote',
+               'calculatedSharePerMember', 'status', 'createdAt', 'updatedAt'
+             ]) &&
+             data.billingMonth is string && data.billingMonth.size() >= 6 && data.billingMonth.size() <= 16 &&
+             data.totalExpenses is number && data.totalExpenses >= 0 &&
+             data.carryForwardAdjustment is number &&
+             data.eligibleMemberCount is int && data.eligibleMemberCount >= 1 &&
+             (data.roundingRule == 'ROUND_NEAREST' || data.roundingRule == 'CEIL' || data.roundingRule == 'EXACT') &&
+             data.promoEnabled is bool &&
+             data.promoAmount is number && data.promoAmount >= 0 &&
+             data.promoEligibilityNote is string && data.promoEligibilityNote.size() <= 300 &&
+             data.calculatedSharePerMember is number && data.calculatedSharePerMember >= 0 &&
+             (data.status == 'OPEN' || data.status == 'CLOSED') &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSubscriptionPayment(data) {
+      return data.keys().hasAll(['userId', 'userName', 'billingMonth', 'cycleId', 'amountPaid', 'paymentMethod', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'userName', 'billingMonth', 'cycleId', 'amountPaid', 'paymentMethod', 'status', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+             data.billingMonth is string && data.billingMonth.size() >= 6 && data.billingMonth.size() <= 16 &&
+             data.cycleId is string && data.cycleId.size() >= 1 && data.cycleId.size() <= 128 &&
+             data.amountPaid is number && data.amountPaid >= 0 &&
+             data.paymentMethod is string && data.paymentMethod.size() >= 2 && data.paymentMethod.size() <= 40 &&
+             (data.status == 'PAID' || data.status == 'PENDING') &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll(['userId', 'userName', 'amount', 'method', 'accountTitle', 'accountNumber', 'status', 'adminNote', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'userName', 'amount', 'method', 'accountTitle', 'accountNumber', 'status', 'adminNote', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+             data.amount is number && data.amount > 0 &&
+             (data.method == 'EASYPAISA' || data.method == 'JAZZCASH' || data.method == 'BANK_TRANSFER') &&
+             data.accountTitle is string && data.accountTitle.size() >= 2 && data.accountTitle.size() <= 100 &&
+             data.accountNumber is string && data.accountNumber.size() >= 4 && data.accountNumber.size() <= 60 &&
+             (data.status == 'PENDING' || data.status == 'APPROVED' || data.status == 'REJECTED') &&
+             data.adminNote is string && data.adminNote.size() <= 300 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidLedgerEntry(data) {
+      return data.keys().hasAll(['userId', 'entryType', 'category', 'amount', 'balanceAfter', 'referenceId', 'description', 'createdAt']) &&
+             data.keys().hasOnly(['userId', 'entryType', 'category', 'amount', 'balanceAfter', 'referenceId', 'description', 'createdAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             (data.entryType == 'CREDIT' || data.entryType == 'DEBIT') &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+             data.amount is number && data.amount >= 0 &&
+             data.balanceAfter is number && data.balanceAfter >= 0 &&
+             data.referenceId is string && data.referenceId.size() >= 1 && data.referenceId.size() <= 128 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 300 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'targetRole', 'title', 'body', 'eventType', 'read', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'targetRole', 'title', 'body', 'eventType', 'read', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             (data.targetRole == 'USER' || data.targetRole == 'ADMIN') &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 400 &&
+             data.eventType is string && data.eventType.size() >= 2 && data.eventType.size() <= 60 &&
+             data.read is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['adminUid', 'adminEmail', 'action', 'targetId', 'details', 'createdAt']) &&
+             data.keys().hasOnly(['adminUid', 'adminEmail', 'action', 'targetId', 'details', 'createdAt']) &&
+             data.adminUid is string && data.adminUid.size() >= 1 && data.adminUid.size() <= 128 &&
+             data.adminEmail is string && data.adminEmail.size() <= 160 &&
+             data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.details is string && data.details.size() <= 500 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().role == 'INVESTOR' &&
+                       incoming().eligibleMember == false &&
+                       incoming().availableBalance == 0 &&
+                       incoming().pendingBalance == 0 &&
+                       incoming().investedCapital == 0 &&
+                       incoming().realizedProfit == 0 &&
+                       incoming().buybackProceeds == 0 &&
+                       isValidUser(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUser(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         isAdmin() ||
+                         (
+                           request.auth.uid == userId && (
+                             (
+                               incoming().role == existing().role &&
+                               incoming().eligibleMember == existing().eligibleMember &&
+                               incoming().availableBalance == existing().availableBalance &&
+                               incoming().pendingBalance == existing().pendingBalance &&
+                               incoming().investedCapital == existing().investedCapital &&
+                               incoming().realizedProfit == existing().realizedProfit &&
+                               incoming().buybackProceeds == existing().buybackProceeds &&
+                               incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'referredByCode', 'referredByUserId', 'updatedAt'])
+                             ) ||
+                             (
+                               incoming().availableBalance < existing().availableBalance &&
+                               incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'updatedAt'])
+                             )
+                           )
+                         )
+                       );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    match /referral_codes/{code} {
+      allow get: if isSignedIn() && isValidId(code);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(code) && incoming().userId == request.auth.uid && incoming().code == code && isValidReferralCodeDoc(incoming());
+      allow update, delete: if false;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(uid) && isValidAdminMember(incoming());
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    match /referrals/{referralId} {
+      allow get: if isSignedIn() && isValidId(referralId) && (resource.data.referrerUserId == request.auth.uid || resource.data.referredUserId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.referrerUserId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(referralId) && incoming().referredUserId == request.auth.uid && incoming().referrerUserId != request.auth.uid && incoming().activeEligible == false && isValidReferral(incoming());
+      allow update: if isAdmin() && isValidId(referralId) && isValidReferral(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /projects/{projectId} {
+      allow get: if isSignedIn() && isValidId(projectId) && (resource.data.published == true || isAdmin());
+      allow list: if isSignedIn() && (resource.data.published == true || isAdmin());
+      allow create: if isAdmin() && isValidId(projectId) && isValidProject(incoming());
+      allow update: if isAdmin() && isValidId(projectId) && isValidProject(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(projectId);
+
+      match /packs/{packId} {
+        allow get: if isSignedIn() && isValidId(packId);
+        allow list: if isSignedIn();
+        allow create: if isAdmin() && isValidId(packId) && incoming().projectId == projectId && isValidPack(incoming());
+        allow update: if isAdmin() && isValidId(packId) && isValidPack(incoming()) && incoming().projectId == existing().projectId && incoming().createdAt == existing().createdAt;
+        allow delete: if isAdmin() && isValidId(packId);
+      }
+    }
+
+    match /payment_channels/{channelId} {
+      allow get: if isSignedIn() && isValidId(channelId) && (resource.data.active == true || isAdmin());
+      allow list: if isSignedIn() && (resource.data.active == true || isAdmin());
+      allow create: if isAdmin() && isValidId(channelId) && isValidPaymentChannel(incoming());
+      allow update: if isAdmin() && isValidId(channelId) && isValidPaymentChannel(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(channelId);
+    }
+
+    match /payment_requests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                       isValidId(requestId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       isValidPaymentRequest(incoming()) &&
+                       exists(/databases/$(database)/documents/projects/$(incoming().projectId));
+      allow update: if isAdmin() &&
+                       isValidId(requestId) &&
+                       isValidPaymentRequest(incoming()) &&
+                       existing().status == 'PENDING' &&
+                       (incoming().status == 'APPROVED' || incoming().status == 'REJECTED') &&
+                       incoming().userId == existing().userId &&
+                       incoming().projectId == existing().projectId &&
+                       incoming().packId == existing().packId &&
+                       incoming().totalAmount == existing().totalAmount &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /ownerships/{ownershipId} {
+      allow get: if isSignedIn() && isValidId(ownershipId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() && isValidId(ownershipId) && isValidOwnership(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(ownershipId) &&
+                       isValidOwnership(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().projectId == existing().projectId &&
+                       incoming().packId == existing().packId &&
+                       incoming().purchasePrice == existing().purchasePrice &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         isAdmin() ||
+                         (
+                           existing().userId == request.auth.uid &&
+                           existing().status == 'ACTIVE' &&
+                           incoming().status == 'BUYBACK_REQUESTED' &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         )
+                       );
+      allow delete: if false;
+    }
+
+    match /product_sales/{saleId} {
+      allow get: if isSignedIn() && isValidId(saleId);
+      allow list: if isSignedIn();
+      allow create: if isAdmin() && isValidId(saleId) && isValidProductSale(incoming());
+      allow update, delete: if false;
+    }
+
+    match /buyback_requests/{buybackId} {
+      allow get: if isSignedIn() && isValidId(buybackId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                       isValidId(buybackId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'REQUESTED' &&
+                       isValidBuybackRequest(incoming()) &&
+                       exists(/databases/$(database)/documents/ownerships/$(incoming().ownershipId)) &&
+                       get(/databases/$(database)/documents/ownerships/$(incoming().ownershipId)).data.userId == request.auth.uid;
+      allow update: if isSignedIn() &&
+                       isValidId(buybackId) &&
+                       isValidBuybackRequest(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().ownershipId == existing().ownershipId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         isAdmin() ||
+                         (
+                           existing().userId == request.auth.uid &&
+                           existing().status == 'OFFERED' &&
+                           (incoming().status == 'ACCEPTED_BY_USER' || incoming().status == 'REJECTED') &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         )
+                       );
+      allow delete: if false;
+    }
+
+    match /company_expenses/{expenseId} {
+      allow get: if isSignedIn() && isValidId(expenseId);
+      allow list: if isSignedIn();
+      allow create: if isAdmin() && isValidId(expenseId) && isValidCompanyExpense(incoming());
+      allow update: if isAdmin() && isValidId(expenseId) && isValidCompanyExpense(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(expenseId);
+    }
+
+    match /subscription_cycles/{cycleId} {
+      allow get: if isSignedIn() && isValidId(cycleId);
+      allow list: if isSignedIn();
+      allow create: if isAdmin() && isValidId(cycleId) && isValidSubscriptionCycle(incoming());
+      allow update: if isAdmin() && isValidId(cycleId) && isValidSubscriptionCycle(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /subscription_payments/{subPayId} {
+      allow get: if isSignedIn() && isValidId(subPayId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                       isValidId(subPayId) &&
+                       incoming().userId == request.auth.uid &&
+                       subPayId == (request.auth.uid + '_' + incoming().billingMonth) &&
+                       isValidSubscriptionPayment(incoming());
+      allow update: if isAdmin() && isValidId(subPayId) && isValidSubscriptionPayment(incoming()) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow get: if isSignedIn() && isValidId(withdrawalId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(withdrawalId) && incoming().userId == request.auth.uid && incoming().status == 'PENDING' && isValidWithdrawal(incoming());
+      allow update: if isAdmin() &&
+                       isValidId(withdrawalId) &&
+                       isValidWithdrawal(incoming()) &&
+                       existing().status == 'PENDING' &&
+                       (incoming().status == 'APPROVED' || incoming().status == 'REJECTED') &&
+                       incoming().userId == existing().userId &&
+                       incoming().amount == existing().amount &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /ledger_entries/{entryId} {
+      allow get: if isSignedIn() && isValidId(entryId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       isValidLedgerEntry(incoming()) &&
+                       (
+                         isAdmin() ||
+                         (incoming().userId == request.auth.uid && incoming().entryType == 'DEBIT' && incoming().category == 'SUBSCRIPTION_PAID')
+                       );
+      allow update, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (resource.data.userId == request.auth.uid || (isAdmin() && resource.data.targetRole == 'ADMIN'));
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || (isAdmin() && resource.data.targetRole == 'ADMIN'));
+      allow create: if isSignedIn() &&
+                       isValidId(notificationId) &&
+                       isValidNotification(incoming()) &&
+                       (isAdmin() || incoming().userId == request.auth.uid);
+      allow update: if isSignedIn() &&
+                       isValidId(notificationId) &&
+                       isValidNotification(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       (isAdmin() || (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])));
+      allow delete: if isSignedIn() && isValidId(notificationId) && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /audit_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin() && isValidId(logId) && incoming().adminUid == request.auth.uid && isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+  }
+}

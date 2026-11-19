@@ -1,0 +1,6 @@
+{
+  "name": "StockShare",
+  "description": "Business investment and physical product ownership marketplace with fixed-price packs, manual payment verification, transparent profit sharing, buybacks, and monthly expense sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
